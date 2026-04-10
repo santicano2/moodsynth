@@ -1,0 +1,151 @@
+import * as Tone from "tone";
+
+import type { CompositionConfig, Instrument } from "@/lib/composer";
+
+type ActiveEngine = {
+  melody: Tone.Sequence<string | null>;
+  bass: Tone.Sequence<string | null>;
+  pad: Tone.Sequence<string[] | null>;
+  melodySynth: Tone.PolySynth;
+  bassSynth: Tone.MonoSynth;
+  padSynth: Tone.PolySynth;
+  masterReverb: Tone.Reverb;
+};
+
+function hasInstrument(instruments: Instrument[], value: Instrument): boolean {
+  return instruments.includes(value);
+}
+
+export class MoodSynthEngine {
+  private active: ActiveEngine | null = null;
+
+  async play(config: CompositionConfig) {
+    await Tone.start();
+    this.stop();
+
+    const masterReverb = new Tone.Reverb({
+      decay: config.ambience.density === "dense" ? 6 : 3,
+      wet: config.ambience.reverb ? 0.45 : 0.15,
+    }).toDestination();
+
+    const melodySynth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: {
+        type: hasInstrument(config.instruments, "pluck") ? "triangle" : "sine",
+      },
+      envelope: {
+        attack: hasInstrument(config.instruments, "pluck") ? 0.01 : 0.04,
+        decay: 0.18,
+        sustain: hasInstrument(config.instruments, "pluck") ? 0.15 : 0.4,
+        release: 0.35,
+      },
+      volume: hasInstrument(config.instruments, "synth") ? -8 : -12,
+    }).connect(masterReverb);
+
+    const bassSynth = new Tone.MonoSynth({
+      oscillator: { type: "square" },
+      envelope: {
+        attack: 0.02,
+        decay: 0.2,
+        sustain: 0.55,
+        release: 0.3,
+      },
+      filter: {
+        type: "lowpass",
+        frequency: 380,
+        rolloff: -24,
+      },
+      volume: -11,
+    }).connect(masterReverb);
+
+    const padSynth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "sawtooth" },
+      envelope: {
+        attack: 0.5,
+        decay: 0.2,
+        sustain: 0.8,
+        release: 1.2,
+      },
+      volume: hasInstrument(config.instruments, "ambient-pad") ? -14 : -20,
+    }).connect(masterReverb);
+
+    const melody = new Tone.Sequence<string | null>(
+      (time, note) => {
+        if (!note) {
+          return;
+        }
+
+        melodySynth.triggerAttackRelease(note, "8n", time, 0.9);
+      },
+      config.layers.melody,
+      config.transport.melodySubdivision,
+    );
+
+    const bass = new Tone.Sequence<string | null>(
+      (time, note) => {
+        if (!note) {
+          return;
+        }
+
+        bassSynth.triggerAttackRelease(note, "8n", time, 0.65);
+      },
+      config.layers.bass,
+      config.transport.bassSubdivision,
+    );
+
+    const pad = new Tone.Sequence<string[] | null>(
+      (time, chord) => {
+        if (!chord) {
+          return;
+        }
+
+        padSynth.triggerAttackRelease(chord, "1m", time, 0.4);
+      },
+      config.layers.pad,
+      config.transport.padSubdivision,
+    );
+
+    Tone.Transport.bpm.value = config.bpm;
+    Tone.Transport.loop = true;
+    Tone.Transport.loopStart = 0;
+    Tone.Transport.loopEnd = "4m";
+
+    melody.start(0);
+    bass.start(0);
+    pad.start(0);
+
+    Tone.Transport.start("+0.02");
+
+    this.active = {
+      melody,
+      bass,
+      pad,
+      melodySynth,
+      bassSynth,
+      padSynth,
+      masterReverb,
+    };
+  }
+
+  stop() {
+    Tone.Transport.stop();
+    Tone.Transport.cancel(0);
+
+    if (!this.active) {
+      return;
+    }
+
+    this.active.melody.dispose();
+    this.active.bass.dispose();
+    this.active.pad.dispose();
+    this.active.melodySynth.dispose();
+    this.active.bassSynth.dispose();
+    this.active.padSynth.dispose();
+    this.active.masterReverb.dispose();
+
+    this.active = null;
+  }
+
+  dispose() {
+    this.stop();
+  }
+}
