@@ -33,6 +33,7 @@ Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener 
 ## Estructura relevante
 
 - `src/app/api/weather/route.ts`: API de clima
+- `src/app/api/cities/route.ts`: sugerencias de ciudad para autocompletado
 - `src/lib/composer.ts`: logica de composicion musical
 - `src/lib/audio-engine.ts`: motor de audio (Tone.js)
 - `src/components/moodsynth-player.tsx`: UI principal, controles y visualizador

@@ -22,6 +22,15 @@ export class MoodSynthEngine {
   private active: ActiveEngine | null = null;
   private tone: ToneModule | null = null;
   private analyser: ToneType.Analyser | null = null;
+  private volumePercent = 70;
+
+  private percentToDb(percent: number): number {
+    if (percent <= 0) {
+      return -60;
+    }
+
+    return -40 + (percent / 100) * 40;
+  }
 
   private async getTone(): Promise<ToneModule> {
     if (!this.tone) {
@@ -36,6 +45,8 @@ export class MoodSynthEngine {
 
     await Tone.start();
     this.stop();
+
+    Tone.Destination.volume.value = this.percentToDb(this.volumePercent);
 
     if (!this.analyser) {
       this.analyser = new Tone.Analyser("waveform", 256);
@@ -145,6 +156,16 @@ export class MoodSynthEngine {
       padSynth,
       masterReverb,
     };
+  }
+
+  setVolume(percent: number) {
+    this.volumePercent = Math.max(0, Math.min(100, percent));
+
+    if (!this.tone) {
+      return;
+    }
+
+    this.tone.Destination.volume.rampTo(this.percentToDb(this.volumePercent), 0.05);
   }
 
   stop() {

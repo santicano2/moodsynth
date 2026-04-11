@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import { MoodSynthEngine } from "@/lib/audio-engine";
 import { composeMusic, type Mood, type WeatherCondition } from "@/lib/composer";
 
@@ -28,6 +27,14 @@ type WeatherApiResponse = {
   condition: WeatherCondition;
   humidity: number;
   localTime: string;
+};
+
+type CitySuggestion = {
+  name: string;
+  country: string;
+  state?: string;
+  label: string;
+  query: string;
 };
 
 const MOODS: Array<{ value: Mood; label: string }> = [
@@ -57,10 +64,14 @@ function weatherLabel(condition: WeatherCondition): string {
 export function MoodSynthPlayer() {
   const engineRef = useRef<MoodSynthEngine | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const [city, setCity] = useState("Buenos Aires");
   const [mood, setMood] = useState<Mood>("Tranquilo");
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSearchingCity, setIsSearchingCity] = useState(false);
+  const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
+  const [volume, setVolume] = useState(70);
   const [weatherCondition, setWeatherCondition] =
     useState<WeatherCondition>("clouds");
   const [compositionText, setCompositionText] = useState(
@@ -74,7 +85,6 @@ export function MoodSynthPlayer() {
 
   useEffect(() => {
     const engine = engineRef.current;
-
     return () => {
       engine?.dispose();
     };
@@ -135,16 +145,71 @@ export function MoodSynthPlayer() {
     };
 
     frameId = window.requestAnimationFrame(draw);
-
     return () => {
       window.cancelAnimationFrame(frameId);
     };
   }, [isPlaying]);
 
+  useEffect(() => {
+    const normalized = city.trim();
+
+    if (normalized.length < 2) {
+      setCitySuggestions([]);
+      setIsSearchingCity(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timerId = window.setTimeout(async () => {
+      setIsSearchingCity(true);
+
+      try {
+        const response = await fetch(
+          `/api/cities?q=${encodeURIComponent(normalized)}`,
+          {
+            signal: controller.signal,
+          },
+        );
+        const payload = (await response.json()) as {
+          suggestions?: CitySuggestion[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          setCitySuggestions([]);
+          return;
+        }
+
+        const suggestions = payload.suggestions ?? [];
+        setCitySuggestions(suggestions);
+      } catch (caughtError) {
+        if (
+          caughtError instanceof DOMException &&
+          caughtError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        setCitySuggestions([]);
+      } finally {
+        setIsSearchingCity(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timerId);
+    };
+  }, [city]);
+
   const isGenerateDisabled = useMemo(
     () => isLoading || city.trim().length === 0,
     [city, isLoading],
   );
+
+  useEffect(() => {
+    engineRef.current?.setVolume(volume);
+  }, [volume]);
 
   async function handleGenerate() {
     if (!engineRef.current) {
@@ -170,6 +235,7 @@ export function MoodSynthPlayer() {
 
       const weather = data as WeatherApiResponse;
       setWeatherCondition(weather.condition);
+
       const composition = composeMusic(mood, {
         temperature: weather.temperature,
         condition: weather.condition,
@@ -206,7 +272,7 @@ export function MoodSynthPlayer() {
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(255,255,255,.16),transparent_40%),radial-gradient(circle_at_82%_18%,rgba(255,255,255,.1),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(0,0,0,.4),transparent_52%)]" />
 
-      <Card className="relative z-10 w-full max-w-2xl border-white/15 bg-black/45 shadow-2xl backdrop-blur-md">
+      <Card className="relative z-10 w-full max-w-3xl border-white/15 bg-black/45 shadow-2xl backdrop-blur-md">
         <CardHeader>
           <CardTitle className="text-2xl text-zinc-100">MoodSynth</CardTitle>
           <CardDescription>
@@ -216,17 +282,31 @@ export function MoodSynthPlayer() {
         </CardHeader>
 
         <CardContent className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-[1.2fr_.8fr]">
-            <div className="space-y-2">
+          <div className="grid gap-4 md:grid-cols-[1.5fr_.8fr]">
+            <div className="relative space-y-2">
               <label className="text-sm text-zinc-300" htmlFor="city">
                 Ciudad
               </label>
               <Input
                 id="city"
+                list="city-suggestions"
                 value={city}
                 onChange={(event) => setCity(event.target.value)}
                 placeholder="Ej: Buenos Aires"
+                autoComplete="off"
               />
+
+              <datalist id="city-suggestions">
+                {citySuggestions.map((suggestion) => (
+                  <option key={`${suggestion.query}-${suggestion.label}`} value={suggestion.query}>
+                    {suggestion.label}
+                  </option>
+                ))}
+              </datalist>
+
+              {isSearchingCity ? (
+                <p className="text-xs text-zinc-400">Buscando ciudades...</p>
+              ) : null}
             </div>
 
             <div className="space-y-2">
@@ -249,6 +329,22 @@ export function MoodSynthPlayer() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm text-zinc-300" htmlFor="volume">
+              Volumen {volume}%
+            </label>
+            <input
+              id="volume"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={volume}
+              onChange={(event) => setVolume(Number(event.target.value))}
+              className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-white/15 accent-emerald-300"
+            />
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">

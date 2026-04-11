@@ -129,18 +129,6 @@
   }
 }
 
-@keyframes drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(0, -1.4%, 0) scale(1.02);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
 @keyframes pulse-light {
   0% {
     filter: saturate(100%);
@@ -158,9 +146,7 @@
 .bg-rain,
 .bg-thunderstorm,
 .bg-snow {
-  animation:
-    drift 11s ease-in-out infinite,
-    pulse-light 7s ease-in-out infinite;
+  animation: pulse-light 12s ease-in-out infinite;
   transition: background 700ms ease;
   background-size: cover;
 }
