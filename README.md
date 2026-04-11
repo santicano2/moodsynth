@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MoodSynth
 
-## Getting Started
+MoodSynth es una app web hecha con Next.js que genera musica procedural en tiempo real a partir de dos entradas:
 
-First, run the development server:
+- estado de animo del usuario
+- clima actual de una ciudad
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener el clima.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Tone.js
+- OpenWeatherMap API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Flujo de la app
 
-## Learn More
+1. El usuario ingresa una ciudad y selecciona un mood.
+2. `GET /api/weather?city=...` consulta OpenWeatherMap:
+   - geocoding para lat/lon
+   - clima actual para temperatura, condicion, humedad y hora local
+3. `composeMusic(mood, weather)` construye una configuracion musical:
+   - escala
+   - BPM
+   - instrumentos
+   - capas (melodia, bajo, pad)
+4. Tone.js reproduce la composicion en loop con secuencias generadas aleatoriamente.
+5. Se actualiza el texto descriptivo y el visualizador de onda.
 
-To learn more about Next.js, take a look at the following resources:
+## Estructura relevante
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/api/weather/route.ts`: API de clima
+- `src/lib/composer.ts`: logica de composicion musical
+- `src/lib/audio-engine.ts`: motor de audio (Tone.js)
+- `src/components/moodsynth-player.tsx`: UI principal, controles y visualizador

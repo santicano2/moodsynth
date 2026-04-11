@@ -128,3 +128,59 @@
     @apply font-sans;
   }
 }
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -1.4%, 0) scale(1.02);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes pulse-light {
+  0% {
+    filter: saturate(100%);
+  }
+  50% {
+    filter: saturate(112%);
+  }
+  100% {
+    filter: saturate(100%);
+  }
+}
+
+.bg-clear,
+.bg-clouds,
+.bg-rain,
+.bg-thunderstorm,
+.bg-snow {
+  animation:
+    drift 11s ease-in-out infinite,
+    pulse-light 7s ease-in-out infinite;
+  transition: background 700ms ease;
+  background-size: cover;
+}
+
+.bg-clear {
+  background: linear-gradient(140deg, #0a1b2e 0%, #0f355e 38%, #1f7bb0 100%);
+}
+
+.bg-clouds {
+  background: linear-gradient(145deg, #101722 0%, #2e3948 45%, #516379 100%);
+}
+
+.bg-rain {
+  background: linear-gradient(150deg, #0b111c 0%, #1f2a3c 45%, #2b4968 100%);
+}
+
+.bg-thunderstorm {
+  background: linear-gradient(135deg, #090b13 0%, #18122f 42%, #2b1f49 100%);
+}
+
+.bg-snow {
+  background: linear-gradient(150deg, #112138 0%, #385475 45%, #7f9cb8 100%);
+}

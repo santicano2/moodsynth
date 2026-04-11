@@ -1,16 +1,18 @@
-import * as Tone from "tone";
+import type * as ToneType from "tone";
 
 import type { CompositionConfig, Instrument } from "@/lib/composer";
 
 type ActiveEngine = {
-  melody: Tone.Sequence<string | null>;
-  bass: Tone.Sequence<string | null>;
-  pad: Tone.Sequence<string[] | null>;
-  melodySynth: Tone.PolySynth;
-  bassSynth: Tone.MonoSynth;
-  padSynth: Tone.PolySynth;
-  masterReverb: Tone.Reverb;
+  melody: ToneType.Sequence<string | null>;
+  bass: ToneType.Sequence<string | null>;
+  pad: ToneType.Sequence<string[] | null>;
+  melodySynth: ToneType.PolySynth;
+  bassSynth: ToneType.MonoSynth;
+  padSynth: ToneType.PolySynth;
+  masterReverb: ToneType.Reverb;
 };
+
+type ToneModule = typeof ToneType;
 
 function hasInstrument(instruments: Instrument[], value: Instrument): boolean {
   return instruments.includes(value);
@@ -18,15 +20,34 @@ function hasInstrument(instruments: Instrument[], value: Instrument): boolean {
 
 export class MoodSynthEngine {
   private active: ActiveEngine | null = null;
+  private tone: ToneModule | null = null;
+  private analyser: ToneType.Analyser | null = null;
+
+  private async getTone(): Promise<ToneModule> {
+    if (!this.tone) {
+      this.tone = await import("tone");
+    }
+
+    return this.tone;
+  }
 
   async play(config: CompositionConfig) {
+    const Tone = await this.getTone();
+
     await Tone.start();
     this.stop();
+
+    if (!this.analyser) {
+      this.analyser = new Tone.Analyser("waveform", 256);
+    }
 
     const masterReverb = new Tone.Reverb({
       decay: config.ambience.density === "dense" ? 6 : 3,
       wet: config.ambience.reverb ? 0.45 : 0.15,
-    }).toDestination();
+    });
+
+    masterReverb.toDestination();
+    masterReverb.connect(this.analyser);
 
     const melodySynth = new Tone.PolySynth(Tone.Synth, {
       oscillator: {
@@ -127,6 +148,12 @@ export class MoodSynthEngine {
   }
 
   stop() {
+    const Tone = this.tone;
+
+    if (!Tone) {
+      return;
+    }
+
     Tone.Transport.stop();
     Tone.Transport.cancel(0);
 
@@ -147,5 +174,21 @@ export class MoodSynthEngine {
 
   dispose() {
     this.stop();
+    this.analyser?.dispose();
+    this.analyser = null;
+  }
+
+  getWaveform(): Float32Array {
+    if (!this.analyser) {
+      return new Float32Array();
+    }
+
+    const value = this.analyser.getValue();
+
+    if (Array.isArray(value)) {
+      return value[0] ?? new Float32Array();
+    }
+
+    return value;
   }
 }
