@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Cloud,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  Clock3,
+  Droplets,
+  MapPin,
+  Music2,
+  Sun,
+  Thermometer,
+  Volume2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -61,6 +67,14 @@ function weatherLabel(condition: WeatherCondition): string {
   return "nieve";
 }
 
+function WeatherIcon({ condition }: { condition: WeatherCondition }) {
+  if (condition === "clear") return <Sun size={20} />;
+  if (condition === "clouds") return <Cloud size={20} />;
+  if (condition === "rain") return <CloudRain size={20} />;
+  if (condition === "thunderstorm") return <CloudLightning size={20} />;
+  return <CloudSnow size={20} />;
+}
+
 export function MoodSynthPlayer() {
   const engineRef = useRef<MoodSynthEngine | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -72,8 +86,12 @@ export function MoodSynthPlayer() {
   const [isSearchingCity, setIsSearchingCity] = useState(false);
   const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
   const [volume, setVolume] = useState(70);
-  const [weatherCondition, setWeatherCondition] =
-    useState<WeatherCondition>("clouds");
+  const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("clouds");
+  const [weatherData, setWeatherData] = useState<WeatherApiResponse | null>(null);
+  const [geoCoords, setGeoCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [geoState, setGeoState] = useState<"idle" | "requesting" | "granted" | "denied">(
+    "idle",
+  );
   const [compositionText, setCompositionText] = useState(
     "Completa ciudad y estado de animo para generar una pieza.",
   );
@@ -92,7 +110,6 @@ export function MoodSynthPlayer() {
 
   useEffect(() => {
     let frameId = 0;
-
     const canvas = canvasRef.current;
     const engine = engineRef.current;
 
@@ -115,32 +132,28 @@ export function MoodSynthPlayer() {
       }
 
       context.clearRect(0, 0, width, height);
-      context.fillStyle = "rgba(5, 8, 18, 0.35)";
+      context.fillStyle = "rgba(0,0,0,0.22)";
       context.fillRect(0, 0, width, height);
 
       const waveform = engine.getWaveform();
+      const bars = 56;
+      const barWidth = width / bars;
 
-      context.beginPath();
-      context.lineWidth = 2;
-      context.strokeStyle = "rgba(167, 243, 208, 0.95)";
+      for (let i = 0; i < bars; i += 1) {
+        const index = Math.floor((i / bars) * waveform.length);
+        const sample = Math.abs(waveform[index] ?? 0);
+        const amp = isPlaying ? Math.max(sample, 0.04) : 0.03;
+        const barHeight = Math.max(6, amp * height * 2.2);
+        const x = i * barWidth + barWidth * 0.28;
+        const y = (height - barHeight) / 2;
 
-      if (isPlaying && waveform.length > 0) {
-        for (let i = 0; i < waveform.length; i += 1) {
-          const x = (i / (waveform.length - 1)) * width;
-          const y = ((waveform[i] + 1) / 2) * height;
-
-          if (i === 0) {
-            context.moveTo(x, y);
-          } else {
-            context.lineTo(x, y);
-          }
-        }
-      } else {
-        context.moveTo(0, height / 2);
-        context.lineTo(width, height / 2);
+        const opacity = 0.2 + (i / bars) * 0.6;
+        context.fillStyle = `rgba(147, 161, 154, ${opacity})`;
+        context.beginPath();
+        context.roundRect(x, y, Math.max(2, barWidth * 0.45), barHeight, 6);
+        context.fill();
       }
 
-      context.stroke();
       frameId = window.requestAnimationFrame(draw);
     };
 
@@ -152,7 +165,6 @@ export function MoodSynthPlayer() {
 
   useEffect(() => {
     const normalized = city.trim();
-
     if (normalized.length < 2) {
       setCitySuggestions([]);
       setIsSearchingCity(false);
@@ -162,17 +174,12 @@ export function MoodSynthPlayer() {
     const controller = new AbortController();
     const timerId = window.setTimeout(async () => {
       setIsSearchingCity(true);
-
       try {
-        const response = await fetch(
-          `/api/cities?q=${encodeURIComponent(normalized)}`,
-          {
-            signal: controller.signal,
-          },
-        );
+        const response = await fetch(`/api/cities?q=${encodeURIComponent(normalized)}`, {
+          signal: controller.signal,
+        });
         const payload = (await response.json()) as {
           suggestions?: CitySuggestion[];
-          error?: string;
         };
 
         if (!response.ok) {
@@ -180,16 +187,11 @@ export function MoodSynthPlayer() {
           return;
         }
 
-        const suggestions = payload.suggestions ?? [];
-        setCitySuggestions(suggestions);
+        setCitySuggestions(payload.suggestions ?? []);
       } catch (caughtError) {
-        if (
-          caughtError instanceof DOMException &&
-          caughtError.name === "AbortError"
-        ) {
+        if (caughtError instanceof DOMException && caughtError.name === "AbortError") {
           return;
         }
-
         setCitySuggestions([]);
       } finally {
         setIsSearchingCity(false);
@@ -202,14 +204,41 @@ export function MoodSynthPlayer() {
     };
   }, [city]);
 
+  useEffect(() => {
+    engineRef.current?.setVolume(volume);
+  }, [volume]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setGeoState("denied");
+      return;
+    }
+
+    setGeoState("requesting");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setGeoCoords({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+        });
+        setGeoState("granted");
+      },
+      () => {
+        setGeoState("denied");
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 6000,
+        maximumAge: 300000,
+      },
+    );
+  }, []);
+
   const isGenerateDisabled = useMemo(
     () => isLoading || city.trim().length === 0,
     [city, isLoading],
   );
-
-  useEffect(() => {
-    engineRef.current?.setVolume(volume);
-  }, [volume]);
 
   async function handleGenerate() {
     if (!engineRef.current) {
@@ -220,20 +249,25 @@ export function MoodSynthPlayer() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        `/api/weather?city=${encodeURIComponent(city.trim())}`,
-      );
-      const data = (await response.json()) as
-        | WeatherApiResponse
-        | { error: string };
+      const params = new URLSearchParams();
+
+      if (geoCoords) {
+        params.set("lat", String(geoCoords.lat));
+        params.set("lon", String(geoCoords.lon));
+      } else {
+        params.set("city", city.trim());
+      }
+
+      const response = await fetch(`/api/weather?${params.toString()}`);
+      const data = (await response.json()) as WeatherApiResponse | { error: string };
 
       if (!response.ok) {
-        const message =
-          "error" in data ? data.error : "No se pudo obtener el clima.";
+        const message = "error" in data ? data.error : "No se pudo obtener el clima.";
         throw new Error(message);
       }
 
       const weather = data as WeatherApiResponse;
+      setWeatherData(weather);
       setWeatherCondition(weather.condition);
 
       const composition = composeMusic(mood, {
@@ -244,7 +278,6 @@ export function MoodSynthPlayer() {
       });
 
       await engineRef.current.play(composition);
-
       setIsPlaying(true);
       setCompositionText(
         `${composition.description} Clima en ${weather.city}: ${weatherLabel(weather.condition)}, ${weather.temperature}C y humedad ${weather.humidity}%. Hora local ${weather.localTime}.`,
@@ -267,26 +300,26 @@ export function MoodSynthPlayer() {
   }
 
   return (
-    <main
-      className={`relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 ${WEATHER_BACKGROUND[weatherCondition]}`}
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(255,255,255,.16),transparent_40%),radial-gradient(circle_at_82%_18%,rgba(255,255,255,.1),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(0,0,0,.4),transparent_52%)]" />
+    <main className={`modern-shell ${WEATHER_BACKGROUND[weatherCondition]}`}>
+      <div className="modern-body">
+        <section className="modern-main">
+          <div className="modern-headline">
+            <div>
+              <h1>MOODSYNTH_01</h1>
+              <p>
+                {geoState === "granted"
+                  ? "Ubicacion detectada automaticamente"
+                  : geoState === "requesting"
+                    ? "Solicitando ubicacion..."
+                    : "Ubicacion no disponible, usa ciudad manual"}
+              </p>
+            </div>
+            <div className="modern-clock">{weatherData?.localTime ?? "--:--"}</div>
+          </div>
 
-      <Card className="relative z-10 w-full max-w-3xl border-white/15 bg-black/45 shadow-2xl backdrop-blur-md">
-        <CardHeader>
-          <CardTitle className="text-2xl text-zinc-100">MoodSynth</CardTitle>
-          <CardDescription>
-            Generador procedural de musica basado en estado de animo y clima en
-            tiempo real.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-[1.5fr_.8fr]">
-            <div className="relative space-y-2">
-              <label className="text-sm text-zinc-300" htmlFor="city">
-                Ciudad
-              </label>
+          <div className="modern-grid">
+            <div className="modern-panel-left">
+              <label htmlFor="city">Ciudad</label>
               <Input
                 id="city"
                 list="city-suggestions"
@@ -294,8 +327,8 @@ export function MoodSynthPlayer() {
                 onChange={(event) => setCity(event.target.value)}
                 placeholder="Ej: Buenos Aires"
                 autoComplete="off"
+                disabled={geoState === "granted"}
               />
-
               <datalist id="city-suggestions">
                 {citySuggestions.map((suggestion) => (
                   <option key={`${suggestion.query}-${suggestion.label}`} value={suggestion.query}>
@@ -304,19 +337,8 @@ export function MoodSynthPlayer() {
                 ))}
               </datalist>
 
-              {isSearchingCity ? (
-                <p className="text-xs text-zinc-400">Buscando ciudades...</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm text-zinc-300" htmlFor="mood">
-                Estado de animo
-              </label>
-              <Select
-                value={mood}
-                onValueChange={(value) => setMood(value as Mood)}
-              >
+              <label htmlFor="mood">Estado de animo</label>
+              <Select value={mood} onValueChange={(value) => setMood(value as Mood)}>
                 <SelectTrigger id="mood" className="w-full">
                   <SelectValue placeholder="Selecciona un estado" />
                 </SelectTrigger>
@@ -328,57 +350,99 @@ export function MoodSynthPlayer() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <label htmlFor="volume">Volumen {volume}%</label>
+              <input
+                id="volume"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={volume}
+                onChange={(event) => setVolume(Number(event.target.value))}
+                className="modern-slider"
+              />
+
+              {isSearchingCity ? <p className="modern-help">Buscando ciudades...</p> : null}
+              {geoState === "granted" ? (
+                <p className="modern-help">Usando tu ubicacion actual para el clima.</p>
+              ) : null}
+            </div>
+
+            <div className="modern-panel-center">
+              <canvas ref={canvasRef} className="modern-visualizer" />
+            </div>
+
+            <div className="modern-panel-right">
+              <div className="modern-weather-card">
+                <span className="modern-icon">
+                  <WeatherIcon condition={weatherCondition} />
+                </span>
+                <div>
+                  <p className="modern-kicker">Environment</p>
+                  <h3>{weatherData?.city ?? "Sin ciudad"}</h3>
+                </div>
+              </div>
+
+              <div className="modern-metrics">
+                <div>
+                  <p>
+                    <Thermometer size={12} /> TEMP
+                  </p>
+                  <strong>{weatherData ? `${weatherData.temperature}C` : "--"}</strong>
+                </div>
+                <div>
+                  <p>
+                    <Droplets size={12} /> HUM
+                  </p>
+                  <strong>{weatherData ? `${weatherData.humidity}%` : "--"}</strong>
+                </div>
+                <div>
+                  <p>
+                    <Clock3 size={12} /> TIME
+                  </p>
+                  <strong>{weatherData?.localTime ?? "--:--"}</strong>
+                </div>
+                <div>
+                  <p>
+                    <Cloud size={12} /> SKY
+                  </p>
+                  <strong>{weatherLabel(weatherCondition)}</strong>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm text-zinc-300" htmlFor="volume">
-              Volumen {volume}%
-            </label>
-            <input
-              id="volume"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={volume}
-              onChange={(event) => setVolume(Number(event.target.value))}
-              className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-white/15 accent-emerald-300"
-            />
+          <div className="modern-footerbar">
+            <div className="modern-dock-top">
+              <div className="modern-dock-meta">
+                <MapPin size={14} />
+                <span>{weatherData?.city ?? "Sin ciudad"}</span>
+              </div>
+              <div className="modern-dock-meta">
+                <Music2 size={14} />
+                <span>{mood}</span>
+              </div>
+              <div className="modern-dock-meta">
+                <Volume2 size={14} />
+                <span>{volume}%</span>
+              </div>
+            </div>
+
+            <div className="modern-dock-actions">
+              <Button onClick={handleGenerate} disabled={isGenerateDisabled}>
+                {isLoading ? "Generando..." : "Generar"}
+              </Button>
+              <Button variant="secondary" onClick={handleStop} disabled={!isPlaying}>
+                Detener
+              </Button>
+            </div>
+
+            <p>{compositionText}</p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
-              className="sm:flex-1"
-              onClick={handleGenerate}
-              disabled={isGenerateDisabled}
-            >
-              {isLoading ? "Generando..." : "Generar musica"}
-            </Button>
-            <Button
-              variant="secondary"
-              className="sm:flex-1"
-              onClick={handleStop}
-              disabled={!isPlaying}
-            >
-              Detener
-            </Button>
-          </div>
-
-          <canvas
-            ref={canvasRef}
-            className="h-28 w-full rounded-lg border border-white/20 bg-black/30"
-          />
-
-          <p className="text-sm leading-relaxed text-zinc-200">
-            {compositionText}
-          </p>
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
-        </CardContent>
-      </Card>
-
-      <div className="pointer-events-none absolute bottom-4 z-10 text-xs tracking-wide text-white/70">
-        Clima actual: {weatherLabel(weatherCondition)}
+          {error ? <p className="modern-error">{error}</p> : null}
+        </section>
       </div>
     </main>
   );

@@ -83,41 +83,54 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const city = searchParams.get("city")?.trim();
+  const latParam = searchParams.get("lat");
+  const lonParam = searchParams.get("lon");
+  const lat = latParam ? Number(latParam) : null;
+  const lon = lonParam ? Number(lonParam) : null;
+  const hasCoords = lat !== null && lon !== null && !Number.isNaN(lat) && !Number.isNaN(lon);
 
-  if (!city) {
+  if (!city && !hasCoords) {
     return NextResponse.json(
-      { error: "Query parameter 'city' is required." },
+      { error: "Provide either 'city' or both 'lat' and 'lon'." },
       { status: 400 },
     );
   }
 
-  const geocodeUrl = new URL(OPEN_WEATHER_GEOCODE_URL);
-  geocodeUrl.searchParams.set("q", city);
-  geocodeUrl.searchParams.set("limit", "1");
-  geocodeUrl.searchParams.set("appid", apiKey);
+  let resolvedLat = lat;
+  let resolvedLon = lon;
 
-  const geocodeRes = await fetch(geocodeUrl, { cache: "no-store" });
+  if (!hasCoords) {
+    const geocodeUrl = new URL(OPEN_WEATHER_GEOCODE_URL);
+    geocodeUrl.searchParams.set("q", city as string);
+    geocodeUrl.searchParams.set("limit", "1");
+    geocodeUrl.searchParams.set("appid", apiKey);
 
-  if (!geocodeRes.ok) {
-    return NextResponse.json(
-      { error: "Unable to resolve city coordinates." },
-      { status: 502 },
-    );
-  }
+    const geocodeRes = await fetch(geocodeUrl, { cache: "no-store" });
 
-  const geocodeData = (await geocodeRes.json()) as GeocodingItem[];
-  const location = geocodeData.at(0);
+    if (!geocodeRes.ok) {
+      return NextResponse.json(
+        { error: "Unable to resolve city coordinates." },
+        { status: 502 },
+      );
+    }
 
-  if (!location) {
-    return NextResponse.json(
-      { error: `City '${city}' not found.` },
-      { status: 404 },
-    );
+    const geocodeData = (await geocodeRes.json()) as GeocodingItem[];
+    const location = geocodeData.at(0);
+
+    if (!location) {
+      return NextResponse.json(
+        { error: `City '${city}' not found.` },
+        { status: 404 },
+      );
+    }
+
+    resolvedLat = location.lat;
+    resolvedLon = location.lon;
   }
 
   const weatherUrl = new URL(OPEN_WEATHER_CURRENT_URL);
-  weatherUrl.searchParams.set("lat", String(location.lat));
-  weatherUrl.searchParams.set("lon", String(location.lon));
+  weatherUrl.searchParams.set("lat", String(resolvedLat));
+  weatherUrl.searchParams.set("lon", String(resolvedLon));
   weatherUrl.searchParams.set("units", "metric");
   weatherUrl.searchParams.set("appid", apiKey);
 
