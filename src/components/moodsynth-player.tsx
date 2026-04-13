@@ -12,6 +12,7 @@ import {
   Music2,
   Sun,
   Thermometer,
+  WandSparkles,
   Volume2,
 } from "lucide-react";
 
@@ -43,6 +44,12 @@ type CitySuggestion = {
   query: string;
 };
 
+type Preset = {
+  label: string;
+  mood: Mood;
+  volume: number;
+};
+
 const MOODS: Array<{ value: Mood; label: string }> = [
   { value: "Feliz", label: "Feliz" },
   { value: "Melancolico", label: "Melancolico" },
@@ -58,6 +65,12 @@ const WEATHER_BACKGROUND: Record<WeatherCondition, string> = {
   thunderstorm: "bg-thunderstorm",
   snow: "bg-snow",
 };
+
+const QUICK_PRESETS: Preset[] = [
+  { label: "Calma", mood: "Tranquilo", volume: 42 },
+  { label: "Noche", mood: "Melancolico", volume: 36 },
+  { label: "Tormenta", mood: "Ansioso", volume: 74 },
+];
 
 function weatherLabel(condition: WeatherCondition): string {
   if (condition === "clear") return "despejado";
@@ -86,8 +99,10 @@ export function MoodSynthPlayer() {
   const [isSearchingCity, setIsSearchingCity] = useState(false);
   const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
   const [volume, setVolume] = useState(70);
+  const [useAutoLocation, setUseAutoLocation] = useState(true);
   const [weatherCondition, setWeatherCondition] = useState<WeatherCondition>("clouds");
   const [weatherData, setWeatherData] = useState<WeatherApiResponse | null>(null);
+  const [lastBpm, setLastBpm] = useState<number | null>(null);
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [geoState, setGeoState] = useState<"idle" | "requesting" | "granted" | "denied">(
     "idle",
@@ -107,6 +122,12 @@ export function MoodSynthPlayer() {
       engine?.dispose();
     };
   }, []);
+
+  useEffect(() => {
+    if (geoState === "denied") {
+      setUseAutoLocation(false);
+    }
+  }, [geoState]);
 
   useEffect(() => {
     let frameId = 0;
@@ -235,10 +256,18 @@ export function MoodSynthPlayer() {
     );
   }, []);
 
-  const isGenerateDisabled = useMemo(
-    () => isLoading || city.trim().length === 0,
-    [city, isLoading],
-  );
+  const isGenerateDisabled = useMemo(() => {
+    if (isLoading) {
+      return true;
+    }
+
+    const canUseGeo = useAutoLocation && geoCoords !== null;
+    if (canUseGeo) {
+      return false;
+    }
+
+    return city.trim().length === 0;
+  }, [city, geoCoords, isLoading, useAutoLocation]);
 
   async function handleGenerate() {
     if (!engineRef.current) {
@@ -251,7 +280,7 @@ export function MoodSynthPlayer() {
     try {
       const params = new URLSearchParams();
 
-      if (geoCoords) {
+      if (useAutoLocation && geoCoords) {
         params.set("lat", String(geoCoords.lat));
         params.set("lon", String(geoCoords.lon));
       } else {
@@ -279,6 +308,7 @@ export function MoodSynthPlayer() {
 
       await engineRef.current.play(composition);
       setIsPlaying(true);
+      setLastBpm(composition.bpm);
       setCompositionText(
         `${composition.description} Clima en ${weather.city}: ${weatherLabel(weather.condition)}, ${weather.temperature}C y humedad ${weather.humidity}%. Hora local ${weather.localTime}.`,
       );
@@ -297,6 +327,37 @@ export function MoodSynthPlayer() {
   function handleStop() {
     engineRef.current?.stop();
     setIsPlaying(false);
+  }
+
+  async function handleRegenerateVariation() {
+    if (!engineRef.current) {
+      return;
+    }
+
+    if (!weatherData) {
+      await handleGenerate();
+      return;
+    }
+
+    setError(null);
+    const composition = composeMusic(mood, {
+      temperature: weatherData.temperature,
+      condition: weatherData.condition,
+      humidity: weatherData.humidity,
+      localTime: weatherData.localTime,
+    });
+
+    await engineRef.current.play(composition);
+    setIsPlaying(true);
+    setLastBpm(composition.bpm);
+    setCompositionText(
+      `${composition.description} Variacion regenerada para ${weatherData.city} con ${weatherLabel(weatherData.condition)}.`,
+    );
+  }
+
+  function applyPreset(preset: Preset) {
+    setMood(preset.mood);
+    setVolume(preset.volume);
   }
 
   return (
@@ -320,6 +381,23 @@ export function MoodSynthPlayer() {
           <div className="modern-grid">
             <div className="modern-panel-left">
               <label htmlFor="city">Ciudad</label>
+              <div className="modern-toggle-row">
+                <button
+                  type="button"
+                  className={`modern-toggle ${useAutoLocation ? "is-active" : ""}`}
+                  onClick={() => setUseAutoLocation(true)}
+                  disabled={geoState !== "granted"}
+                >
+                  Usar ubicacion
+                </button>
+                <button
+                  type="button"
+                  className={`modern-toggle ${!useAutoLocation ? "is-active" : ""}`}
+                  onClick={() => setUseAutoLocation(false)}
+                >
+                  Manual
+                </button>
+              </div>
               <Input
                 id="city"
                 list="city-suggestions"
@@ -327,7 +405,7 @@ export function MoodSynthPlayer() {
                 onChange={(event) => setCity(event.target.value)}
                 placeholder="Ej: Buenos Aires"
                 autoComplete="off"
-                disabled={geoState === "granted"}
+                disabled={useAutoLocation && geoState === "granted"}
               />
               <datalist id="city-suggestions">
                 {citySuggestions.map((suggestion) => (
@@ -364,9 +442,22 @@ export function MoodSynthPlayer() {
               />
 
               {isSearchingCity ? <p className="modern-help">Buscando ciudades...</p> : null}
-              {geoState === "granted" ? (
+              {useAutoLocation && geoState === "granted" ? (
                 <p className="modern-help">Usando tu ubicacion actual para el clima.</p>
               ) : null}
+
+              <div className="modern-presets">
+                {QUICK_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    className="modern-chip"
+                    onClick={() => applyPreset(preset)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="modern-panel-center">
@@ -427,11 +518,18 @@ export function MoodSynthPlayer() {
                 <Volume2 size={14} />
                 <span>{volume}%</span>
               </div>
+              <div className="modern-dock-meta">
+                <Clock3 size={14} />
+                <span>{lastBpm ? `${lastBpm} BPM` : "-- BPM"}</span>
+              </div>
             </div>
 
             <div className="modern-dock-actions">
               <Button onClick={handleGenerate} disabled={isGenerateDisabled}>
                 {isLoading ? "Generando..." : "Generar"}
+              </Button>
+              <Button variant="outline" onClick={handleRegenerateVariation}>
+                <WandSparkles size={14} /> Variar
               </Button>
               <Button variant="secondary" onClick={handleStop} disabled={!isPlaying}>
                 Detener

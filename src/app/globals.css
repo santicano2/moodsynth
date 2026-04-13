@@ -268,6 +268,52 @@
   margin: 0.1rem 0 0;
 }
 
+.modern-toggle-row {
+  display: flex;
+  gap: 0.38rem;
+}
+
+.modern-toggle {
+  background: rgba(37, 38, 38, 0.65);
+  border: 1px solid rgba(72, 72, 72, 0.16);
+  color: #acabaa;
+  border-radius: 0.2rem;
+  font-size: 0.67rem;
+  letter-spacing: 0.05em;
+  padding: 0.3rem 0.45rem;
+}
+
+.modern-toggle.is-active {
+  color: #16231e;
+  background: #93a19a;
+}
+
+.modern-toggle:disabled {
+  opacity: 0.5;
+}
+
+.modern-presets {
+  margin-top: 0.28rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.modern-chip {
+  border: 1px solid rgba(72, 72, 72, 0.16);
+  background: rgba(31, 32, 32, 0.72);
+  color: #acabaa;
+  padding: 0.2rem 0.42rem;
+  border-radius: 0.2rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.modern-chip:hover {
+  color: #e7e5e4;
+}
+
 .modern-panel-center {
   display: flex;
   align-items: center;
