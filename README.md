@@ -9,7 +9,7 @@ Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener 
 
 ## Stack
 
-- Next.js (App Router)
+- Next.js
 - TypeScript
 - Tailwind CSS
 - shadcn/ui
@@ -30,7 +30,7 @@ Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener 
 4. Tone.js reproduce la composicion en loop con secuencias generadas aleatoriamente.
 5. Se actualiza el texto descriptivo y el visualizador de onda.
 
-## Estructura relevante
+## Estructura
 
 - `src/app/api/weather/route.ts`: API de clima
 - `src/app/api/cities/route.ts`: sugerencias de ciudad para autocompletado
