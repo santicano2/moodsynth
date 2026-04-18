@@ -2,8 +2,8 @@
 
 MoodSynth es una app web hecha con Next.js que genera musica procedural en tiempo real a partir de dos entradas:
 
-- estado de animo del usuario
-- clima actual de una ciudad
+- Estado de animo del usuario
+- Clima actual de una ciudad
 
 Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener el clima.
 
