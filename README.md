@@ -18,7 +18,7 @@ Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener 
 
 ## Flujo de la app
 
-1. El usuario ingresa una ciudad y selecciona un mood.
+1. El usuario ingresa una ciudad y selecciona un mood
 2. `GET /api/weather?city=...` consulta OpenWeatherMap:
    - geocoding para lat/lon
    - clima actual para temperatura, condicion, humedad y hora local
@@ -27,8 +27,8 @@ Usa Tone.js para sintetizar audio en el navegador y OpenWeatherMap para obtener 
    - BPM
    - instrumentos
    - capas (melodia, bajo, pad)
-4. Tone.js reproduce la composicion en loop con secuencias generadas aleatoriamente.
-5. Se actualiza el texto descriptivo y el visualizador de onda.
+4. Tone.js reproduce la composicion en loop con secuencias generadas aleatoriamente
+5. Se actualiza el texto descriptivo y el visualizador de onda
 
 ## Estructura
 
